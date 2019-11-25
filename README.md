@@ -18,9 +18,11 @@ NODE_RPC_ENDPOINT='http://localhost:8545' python decode_order.py --inputCode <> 
 
 ## Usage
 
-# python decode_order.py -node-url http://localhost:8545 --inputCode <long input string> --fromAddress <hexAddress> --verbose
-# --node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found
-#
+```
+python decode_order.py -node-url http://localhost:8545 --inputCode <long input string> --fromAddress <hexAddress> --verbose
+--node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found
+```
+
  python decode_order.py --help
 USING SWAP ADDRESS 0xD9EEf94131305538cD601aeE42e57C554c1c1C92
 usage: decode_order.py [-h] [--nodeUrl n] [--inputCode INPUTCODE]
