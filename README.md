@@ -23,7 +23,7 @@ python decode_order.py ARGS
 
 ```
 NODE_RPC_ENDPOINT='http://localhost:8545' python decode_order.py 
---inputCode <> --fromAddress <> --verbose
+--inputCode <> --fromAddress <> --blockNumber <> --verbose
 ```
 
 ## Usage
@@ -33,8 +33,11 @@ python decode_order.py
 --node-url http://localhost:8545 
 --inputCode <long input string> 
 --fromAddress <hexAddress> --verbose
---node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found
+--blockNumber <>
 ```
+
+node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found
+blockNumber if skipped will default to latest 
 
 ```bash
  python decode_order.py --help
@@ -46,10 +49,14 @@ Debug a failed transaction via inputCode.
 
 optional arguments:
   -h, --help            show this help message and exit
-  --nodeUrl n           Ethereum node URL: http://localhost:8545
+  --nodeUrl URL         Ethereum node URL: http://localhost:8545
   --inputCode INPUTCODE
                         Input byte code as a string
   --fromAddress FROMADDRESS
                         Sending address of the transaction
+  --blockNumber BLOCKNUMBER
+                        Block number to fetch state from (infura works) not
+                        sure about light nodes
   --verbose             Will output a more verbose output
+
 ```
