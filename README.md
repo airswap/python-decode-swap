@@ -2,7 +2,7 @@
 
 ### To setup:
 
-Make sure you are using pythoh 3.6+
+Make sure you are using Python 3.6+
 
 ```bash
 virtualenv venv --python=python3.6
