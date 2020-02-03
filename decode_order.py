@@ -33,6 +33,7 @@ with open(os.getcwd() + "/abi/Token.json", "r") as json_data:
     TOKEN_ABI = json.loads(json_data.read())["abi"]
 
 PRESWAP = {
+    "mainnet": "0xCFE3F3B6491e73949898620621F103f4Ba556b82",
     "rinkeby": "0x062CbA74439aFfD967ef981B6177232791698C7B"
 }
 
@@ -388,7 +389,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--delegate",
-        default=False,
+        default="",
         action="store_true",
         help="Indicate whether a delegate contract was used",
     )
