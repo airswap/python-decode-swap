@@ -34,6 +34,9 @@ python decode_order.py
 --inputCode <long input string> 
 --fromAddress <hexAddress> --verbose
 --blockNumber <>
+--network <>
+--wrapper <True/False>
+--delegate ""
 ```
 
 node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found
@@ -58,6 +61,11 @@ optional arguments:
                         sure about light nodes
   --network NETWORK_NAME
                         Defaults to rinkeby but inputs are either rinkeby or mainnet (lower cased)
+  --wrapper True / False
+                        Defaults to false and will try to decode the order through swap contract not wrapper
+  --delegate DELEGATEADDRESS
+                        Defaults to empty and will try to decode the order through swap contract not delegate
+
   --verbose             Will output a more verbose output
 
 ```

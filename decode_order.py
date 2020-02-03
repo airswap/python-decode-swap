@@ -24,6 +24,14 @@ with open(os.getcwd() + "/abi/PreSwapChecker.txt", "r") as json_data:
 with open(os.getcwd() + "/abi/Wrapper.txt", "r") as json_data:
     WRAPPER_ABI = json_data.read()
 
+# Delegate ABI to match address
+with open(os.getcwd() + "/abi/Delegate.txt", "r") as json_data:
+    DELEGATE_ABI = json_data.read()
+
+# General erc20 abi
+with open(os.getcwd() + "/abi/Token.json", "r") as json_data:
+    TOKEN_ABI = json.loads(json_data.read())["abi"]
+
 PRESWAP = {
     "rinkeby": "0x062CbA74439aFfD967ef981B6177232791698C7B"
 }
@@ -38,9 +46,7 @@ WRAPPER = {
     "rinkeby": "0x8C80e2c9C5244C2283Da85396dde6b7af4ebaA31"
 }
 
-# General erc20 abi
-with open(os.getcwd() + "/abi/Token.json", "r") as json_data:
-    TOKEN_ABI = json.loads(json_data.read())["abi"]
+
 
 if "NODE_RPC_ENDPOINT" in os.environ:
     NODE_RPC_ENDPOINT = os.environ["NODE_RPC_ENDPOINT"]
@@ -198,8 +204,39 @@ def call_preswap_checker(order, network):
         return ""
 
 
-def inputOrderCheck(trans, fromAddress, blockNumber, network, verbose):
-    contract = w3.eth.contract(abi=WRAPPER_ABI)
+def call_delegate_checker(order, delegate, network):
+    """
+    check_expiry: determine nonce in order is valid
+
+    """
+    try:
+        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
+        contract = web3_instance.eth.contract(
+            address=Web3.toChecksumAddress(PRESWAP[network]), abi=PRESWAP_ABI
+        )
+        status = contract.functions.checkSwapDelegate(order, Web3.toChecksumAddress(delegate)).call()
+        errorArray = []
+        if status[0] > 0:
+            print("PreSwap Delegate Errors Found")
+            for i in range(status[0]):
+                errorArray.append((status[1][i]).decode("utf-8").replace('\x00', ''))
+        else:
+            print("PreSwap Delegate No Errors")
+        return errorArray
+
+    except Exception as e:
+        print(e)
+        return ""
+
+
+def inputOrderCheck(trans, fromAddress, blockNumber, network, wrapper, delegate, verbose):
+    if len(delegate) > 0:
+        contract = w3.eth.contract(abi=DELEGATE_ABI)
+    if wrapper:
+        contract = w3.eth.contract(abi=WRAPPER_ABI)
+    else:
+        contract = w3.eth.contract(abi=SWAP_ABI)
+
     Party = namedtuple("Party", "kind wallet token amount id")
     Signature = namedtuple("Signature", "signatory validator version v r s ")
     parsedOrder = contract.decode_function_input(trans)[1]['order']
@@ -218,8 +255,15 @@ def inputOrderCheck(trans, fromAddress, blockNumber, network, verbose):
 
     preSwapChecker = True
     if preSwapChecker:
-        wrapperError = call_preswap_wrapper_checker(parsedOrder, fromAddress, network)
-        print(wrapperError)
+        if len(delegate) > 0:
+            error = call_delegate_checker(parsedOrder, delegate, network)
+            print(error)
+        elif wrapper:
+            error = call_preswap_wrapper_checker(parsedOrder, fromAddress, network)
+            print(error)
+        else:
+            error = call_preswap_checker(parsedOrder, network)
+            print(error)
         return
 
     # if senderParty is not used, use the from address instead
@@ -342,13 +386,17 @@ if __name__ == "__main__":
         help="Indicate whether a wrapper contract was used",
     )
 
+    parser.add_argument(
+        "--delegate",
+        default=False,
+        action="store_true",
+        help="Indicate whether a delegate contract was used",
+    )
+
     args = parser.parse_args()
     print(f"USING SWAP ADDRESS {SWAP_CONTRACT[args.network]}")
     if args.nodeUrl is not None:
         NODE_RPC_ENDPOINT = args.nodeUrl
 
     w3 = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-    if args.wrapper:
-        # do some wrappery checkes
-        inputWrapperCheck(args.inputCode, args.fromAddress)
-    inputOrderCheck(args.inputCode, Web3.toChecksumAddress(args.fromAddress), args.blockNumber, args.network, args.verbose)
+    inputOrderCheck(args.inputCode, Web3.toChecksumAddress(args.fromAddress), args.blockNumber, args.network, args.wrapper, args.delegate, args.verbose)
