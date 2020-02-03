@@ -41,7 +41,6 @@ blockNumber if skipped will default to latest
 
 ```bash
  python decode_order.py --help
-USING SWAP ADDRESS 0xD9EEf94131305538cD601aeE42e57C554c1c1C92
 usage: decode_order.py [-h] [--nodeUrl n] [--inputCode INPUTCODE]
                        [--fromAddress FROMADDRESS] [--verbose]
 
@@ -57,6 +56,8 @@ optional arguments:
   --blockNumber BLOCKNUMBER
                         Block number to fetch state from (infura works) not
                         sure about light nodes
+  --network NETWORK_NAME
+                        Defaults to rinkeby but inputs are either rinkeby or mainnet (lower cased)
   --verbose             Will output a more verbose output
 
 ```
