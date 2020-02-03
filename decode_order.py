@@ -265,80 +265,81 @@ def inputOrderCheck(trans, fromAddress, blockNumber, network, wrapper, delegate,
         else:
             error = call_preswap_checker(parsedOrder, network)
             print(error)
-        return
 
-    # if senderParty is not used, use the from address instead
-    if senderParty.wallet == "0x0000000000000000000000000000000000000000":
-        senderPartyWallet = fromAddress
-    else:
-        senderPartyWallet = senderParty.wallet
+    if len(error) > 0:
 
-    if verbose:
-        print("SIGNER PARTY")
-        pprint(dict(signerParty._asdict()), indent=4)
-        print("SENDER PARTY")
-        pprint(dict(senderParty._asdict()), indent=4)
+        # if senderParty is not used, use the from address instead
+        if senderParty.wallet == "0x0000000000000000000000000000000000000000":
+            senderPartyWallet = fromAddress
+        else:
+            senderPartyWallet = senderParty.wallet
 
-    nonceMessages = check_nonce(signerParty.wallet, network, nonce, blockNumber)
-    print(nonceMessages)
-
-    # check_expiry
-    curtime = int(time.time())
-    if int(time.time()) > expiry:
-        print("Order has expired")
         if verbose:
-            print(f"Order expired with times: {curtime} > {expiry} expired")
-    # Signer Party checks
-    signer_balance = get_balance(signerParty.token, signerParty.wallet, network, blockNumber)
-    signer_allowance = get_allowance(signerParty.token, signerParty.wallet, network, blockNumber)
+            print("SIGNER PARTY")
+            pprint(dict(signerParty._asdict()), indent=4)
+            print("SENDER PARTY")
+            pprint(dict(senderParty._asdict()), indent=4)
 
-    # Check signer party balance is less than what they're sending
-    signer_balance_check = signerParty.amount <= signer_balance
-    signer_allowance_check = signerParty.amount <= signer_allowance
+        nonceMessages = check_nonce(signerParty.wallet, network, nonce, blockNumber)
+        print(nonceMessages)
 
-    if not signer_balance_check:
-        print("Signer Balance is insufficient")
+        # check_expiry
+        curtime = int(time.time())
+        if int(time.time()) > expiry:
+            print("Order has expired")
+            if verbose:
+                print(f"Order expired with times: {curtime} > {expiry} expired")
+        # Signer Party checks
+        signer_balance = get_balance(signerParty.token, signerParty.wallet, network, blockNumber)
+        signer_allowance = get_allowance(signerParty.token, signerParty.wallet, network, blockNumber)
+
+        # Check signer party balance is less than what they're sending
+        signer_balance_check = signerParty.amount <= signer_balance
+        signer_allowance_check = signerParty.amount <= signer_allowance
+
+        if not signer_balance_check:
+            print("Signer Balance is insufficient")
+            if verbose:
+                print(
+                    f"Current Balance {signer_balance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_balance}"
+                )
+        if not signer_allowance_check:
+            print("Signer Allowance is insufficient")
+            if verbose:
+                print(
+                    f"Current Allowance {signer_allowance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_allowance}"
+                )
+        # Sender Party checks
+        sender_balance = get_balance(senderParty.token, senderPartyWallet, network, blockNumber)
+        sender_allowance = get_allowance(senderParty.token, senderPartyWallet, network, blockNumber)
+
+        # Check sender party balance is less than what they're sending
+        sender_balance_check = senderParty.amount <= sender_balance
+        sender_allowance_check = senderParty.amount <= sender_allowance
+
         if verbose:
-            print(
-                f"Current Balance {signer_balance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_balance}"
-            )
-    if not signer_allowance_check:
-        print("Signer Allowance is insufficient")
-        if verbose:
-            print(
-                f"Current Allowance {signer_allowance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_allowance}"
-            )
-    # Sender Party checks
-    sender_balance = get_balance(senderParty.token, senderPartyWallet, network, blockNumber)
-    sender_allowance = get_allowance(senderParty.token, senderPartyWallet, network, blockNumber)
+            print("SIGNER PARTY")
+            print(f"Token balance {sender_balance}")
+            print(f"Token allowance {sender_allowance}")
+            print(f"Param to send {senderParty.amount}")
+            print("SENDER PARTY")
+            print(f"Token balance {signer_balance}")
+            print(f"Token allowance {signer_allowance}")
+            print(f"Param to send {signerParty.amount}")
 
-    # Check sender party balance is less than what they're sending
-    sender_balance_check = senderParty.amount <= sender_balance
-    sender_allowance_check = senderParty.amount <= sender_allowance
-
-    if verbose:
-        print("SIGNER PARTY")
-        print(f"Token balance {sender_balance}")
-        print(f"Token allowance {sender_allowance}")
-        print(f"Param to send {senderParty.amount}")
-        print("SENDER PARTY")
-        print(f"Token balance {signer_balance}")
-        print(f"Token allowance {signer_allowance}")
-        print(f"Param to send {signerParty.amount}")
-
-    # Balance and Allowance Checks
-    if not sender_balance_check:
-        print("Sender Balance is insufficient")
-        if verbose:
-            print(
-                f"Current Balance {sender_balance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_balance}"
-            )
-    if not sender_allowance_check:
-        print("Sender Allowance is insufficient")
-        if verbose:
-            print(
-                f"Current Allowance {sender_allowance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_allowance}"
-            )
+        # Balance and Allowance Checks
+        if not sender_balance_check:
+            print("Sender Balance is insufficient")
+            if verbose:
+                print(
+                    f"Current Balance {sender_balance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_balance}"
+                )
+        if not sender_allowance_check:
+            print("Sender Allowance is insufficient")
+            if verbose:
+                print(
+                    f"Current Allowance {sender_allowance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_allowance}"
+                )
 
 if __name__ == "__main__":
     global w3
