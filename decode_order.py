@@ -1,24 +1,23 @@
-################################################3
-#
+#!/usr/bin/env python
 # python decode_order.py -node-url http://localhost:8545 --inputCode <long input string> --fromAddress <hexAddress> --verbose
-# --node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found --network rinkeby
-#
-#
+# --node-url can be skipped if an environment variable NODE_RPC_ENDPOINT is found --network <networkName>
+
+
 import argparse
 from collections import namedtuple
-import json
 import os
 from pprint import pprint
-import time
 from web3 import Web3
+import sys
+import json
 
 # Swap ABI to match address
 with open(os.getcwd() + "/abi/Swap.txt", "r") as json_data:
     SWAP_ABI = json_data.read()
 
-# PreSwap ABI to match address
-with open(os.getcwd() + "/abi/PreSwapChecker.txt", "r") as json_data:
-    PRESWAP_ABI = json_data.read()
+# Validator ABI to match address
+with open(os.getcwd() + "/abi/Validator.txt", "r") as json_data:
+    VALIDATOR_ABI = json_data.read()
 
 # Wrapper ABI to match address
 with open(os.getcwd() + "/abi/Wrapper.txt", "r") as json_data:
@@ -28,324 +27,286 @@ with open(os.getcwd() + "/abi/Wrapper.txt", "r") as json_data:
 with open(os.getcwd() + "/abi/Delegate.txt", "r") as json_data:
     DELEGATE_ABI = json_data.read()
 
-# General erc20 abi
-with open(os.getcwd() + "/abi/Token.json", "r") as json_data:
-    TOKEN_ABI = json.loads(json_data.read())["abi"]
+# Validator Reasons from airswap-protocols repo
+with open(os.getcwd() + "/reasons/validatorReasons.json", "r") as json_data:
+    REASONS = json.loads(json_data.read())
 
-PRESWAP = {
-    "mainnet": "0xCFE3F3B6491e73949898620621F103f4Ba556b82",
-    "rinkeby": "0x062CbA74439aFfD967ef981B6177232791698C7B"
+NETWORKS = {"mainnet": "1", "rinkeby": "4", "goerli": "5", "kovan": "42"}
+
+VALIDATOR = {
+    "1": "0x0c8d551c52206F1C16043F1dCD9B7bc6A45fc02C",
+    "4": "0x2D8849EAaB159d20Abf10D4a80c97281A12448CC",
+    "5": "0xE5E7116AB49666e9791f53aeD4f5B7207770879D",
+    "42": "0x5EB4EfDC20fFF121dDe66BCbf5987786B3587f01",
 }
 
 SWAP_CONTRACT = {
-    "mainnet": "0x4572f2554421Bd64Bef1c22c8a81840E8D496BeA",
-    "rinkeby": "0x2e7373D70732E0F37F4166D8FD9dBC89DD5BC476"
+    "1": "0x4572f2554421Bd64Bef1c22c8a81840E8D496BeA",
+    "4": "0x2e7373D70732E0F37F4166D8FD9dBC89DD5BC476",
+    "5": "0x18C90516a38Dd7B779A8f6C19FA698F0F4Efc7FC",
+    "42": "0x79fb4604f2D7bD558Cda0DFADb7d61D98b28CA9f",
 }
 
 WRAPPER = {
-    "mainnet": "0x28de5C5f56B6216441eE114e832808D5B9d4A775",
-    "rinkeby": "0x8C80e2c9C5244C2283Da85396dde6b7af4ebaA31"
+    "1": "0x28de5C5f56B6216441eE114e832808D5B9d4A775",
+    "4": "0x8C80e2c9C5244C2283Da85396dde6b7af4ebaA31",
+    "5": "0x982A916882Fb26e9408993b9d03247d44Fb4E8D4",
+    "42": "0xE5E7116AB49666e9791f53aeD4f5B7207770879D",
 }
 
-
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 if "NODE_RPC_ENDPOINT" in os.environ:
     NODE_RPC_ENDPOINT = os.environ["NODE_RPC_ENDPOINT"]
 
-def get_balance(tokenAddress, maker_address, network, blockNumber):
-    try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        withdrawer = SWAP_CONTRACT[network]
-        tokenAbi = TOKEN_ABI
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(tokenAddress), abi=tokenAbi
-        )
-        return int(
-            contract.functions.balanceOf(maker_address).call(
-                block_identifier=blockNumber
-            )
-        )
-    except Exception as e:
-        print(e)
-        return 0
 
-
-def get_allowance(tokenAddress, maker_address, network, blockNumber):
+def checkWrappedSwap(validatorContract, order, fromAddress, network):
     """
-    get_allowance: determine how much allowance does exchange have\
-
+    checkWrappedSwap: calling Validator.checkWrapperSwap
     """
     try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        withdrawer = SWAP_CONTRACT[network]
-        tokenAbi = TOKEN_ABI
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(tokenAddress), abi=tokenAbi,
-        )
-        return int(
-            contract.functions.allowance(maker_address, withdrawer).call(
-                block_identifier=blockNumber
-            )
-        )
-    except Exception as e:
-        print(e)
-        return 0
-
-
-def check_nonce(makerAddress, network, nonce, blockNumber):
-    """
-    check_nonce: determine nonce in order is valid
-
-    """
-    try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(SWAP_CONTRACT[network]), abi=SWAP_ABI
-        )
-        status = int.from_bytes(
-            contract.functions.signerNonceStatus(makerAddress, nonce).call(
-                block_identifier=blockNumber
-            ),
-            "big",
-        )
-        minNonce = contract.functions.signerMinimumNonce(makerAddress).call(
-            block_identifier=blockNumber
-        )
-        returnMsg = ""
-        if status != 0:
-            returnMsg += "\nNonce has already been used"
-        if nonce < minNonce:
-            returnMsg += (
-                f"\nNonce is below the min nonce threshold {minNonce} for signer"
-            )
-        return returnMsg
-    except Exception as e:
-        print(e)
-        return ""
-
-
-def check_expiry(makerAddress, network, expiry, blockNumber):
-    """
-    check_expiry: determine nonce in order is valid
-
-    """
-    try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(SWAP_CONTRACT[network]), abi=SWAP_ABI
-        )
-        status = int.from_bytes(
-            contract.functions.makerOrderStatus(makerAddress, nonce).call(
-                block_identifier=blockNumber
-            ),
-            "big",
-        )
-        minNonce = contract.functions.makerMinimumNonce(makerAddress).call(
-            block_identifier=blockNumber
-        )
-        returnMsg = ""
-        if status != 0:
-            returnMsg += "\nNonce has already been used"
-        if nonce < minNonce:
-            returnMsg += (
-                f"\nNonce is below the min nonce threshold {minNonce} for signer"
-            )
-        return returnMsg
-    except Exception as e:
-        print(e)
-        return ""
-
-
-def call_preswap_wrapper_checker(order, fromAddress, network):
-    """
-    check_expiry: determine nonce in order is valid
-
-    """
-    try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(PRESWAP[network]), abi=PRESWAP_ABI
-        )
-        status = contract.functions.checkSwapWrapper(order, fromAddress, WRAPPER[network]).call()
+        status = validatorContract.functions.checkWrappedSwap(
+            order, fromAddress, WRAPPER[network]
+        ).call()
         errorArray = []
         if status[0] > 0:
-            print("PreSwap Wrapper Errors Found")
+            print("Validator Errors Found: Wrapper.swap")
             for i in range(status[0]):
-                errorArray.append((status[1][i]).decode("utf-8").replace('\x00', ''))
+                errorArray.append((status[1][i]).decode("utf-8").replace("\x00", ""))
         else:
-            print("PreSwap Wrapper  No Errors")
+            print("Validator No Errors: Wrapper.swap")
         return errorArray
 
     except Exception as e:
         print(e)
+        return []
 
 
-def call_preswap_checker(order, network):
-    """
-    check_expiry: determine nonce in order is valid
-
-    """
+def checkWrappedDelegate(validatorContract, order, delegateAddress, network):
+    """checkWrappedDelegate: calling Validator.checkWrapperSwap."""
     try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(PRESWAP[network]), abi=PRESWAP_ABI
-        )
-        status = contract.functions.checkSwapSwap(order, False).call()
+        status = validatorContract.functions.checkWrappedDelegate(
+            order, delegateAddress, WRAPPER[network]
+        ).call()
         errorArray = []
         if status[0] > 0:
-            print("PreSwap Errors Found")
+            print("Validator Errors Found: Wrapper.provideDelegateOrder")
             for i in range(status[0]):
-                errorArray.append((status[1][i]).decode("utf-8").replace('\x00', ''))
+                errorArray.append((status[1][i]).decode("utf-8").replace("\x00", ""))
         else:
-            print("PreSwap No Errors")
+            print("Validator No Errors: Wrapper.provideDelegateOrder")
         return errorArray
 
     except Exception as e:
         print(e)
-        return ""
+        return []
 
 
-def call_delegate_checker(order, delegate, network):
-    """
-    check_expiry: determine nonce in order is valid
-
-    """
+def checkSwap(validatorContract, order):
+    """checkSwap: calling Validator.checkSwap."""
     try:
-        web3_instance = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-        contract = web3_instance.eth.contract(
-            address=Web3.toChecksumAddress(PRESWAP[network]), abi=PRESWAP_ABI
-        )
-        status = contract.functions.checkSwapDelegate(order, Web3.toChecksumAddress(delegate)).call()
+        status = validatorContract.functions.checkSwap(order).call()
         errorArray = []
         if status[0] > 0:
-            print("PreSwap Delegate Errors Found")
+            print("Validator Errors Found: Swap.swap")
             for i in range(status[0]):
-                errorArray.append((status[1][i]).decode("utf-8").replace('\x00', ''))
+                errorArray.append((status[1][i]).decode("utf-8").replace("\x00", ""))
         else:
-            print("PreSwap Delegate No Errors")
+            print("Validator No Errors: Swap.swap")
         return errorArray
 
     except Exception as e:
         print(e)
-        return ""
+        return []
 
 
-def inputOrderCheck(trans, fromAddress, blockNumber, network, wrapper, delegate, verbose):
-    if len(delegate) > 0:
-        contract = w3.eth.contract(abi=DELEGATE_ABI)
-    if wrapper:
+def checkDelegate(validatorContract, order, delegateAddress):
+    """checkDelegate: calling Validator.checkDelegate."""
+    try:
+        status = validatorContract.functions.checkDelegate(
+            order, Web3.toChecksumAddress(delegateAddress)
+        ).call()
+        errorArray = []
+        if status[0] > 0:
+            print("Validator Errors Found: Delegate.provideOrder")
+            for i in range(status[0]):
+                errorArray.append((status[1][i]).decode("utf-8").replace("\x00", ""))
+        else:
+            print("Validator No Errors: Delegate.provideOrder")
+        return errorArray
+
+    except Exception as e:
+        print(e)
+        return []
+
+
+def fetchTransactionFromHash(
+    validatorContract, trxnHash, blockNumber, network, verbose
+):
+    """fetchTransactionFromHash: fetches the transaction details from hash."""
+    global w3
+
+    fetchedTrxn = w3.eth.getTransaction(trxnHash)
+    trans = fetchedTrxn["input"]
+    fromAddress = fetchedTrxn["from"]
+    toAddress = fetchedTrxn["to"]
+    wrapper = False
+    delegate = False
+    delegateAddress = None
+    if toAddress == WRAPPER[network]:
         contract = w3.eth.contract(abi=WRAPPER_ABI)
-    else:
+        wrapper = True
+    elif toAddress == SWAP_CONTRACT[network]:
         contract = w3.eth.contract(abi=SWAP_ABI)
+    else:
+        contract = w3.eth.contract(abi=DELEGATE_ABI)
+        delegateAddress = toAddress
+
+    try:
+        parsedOrder = contract.decode_function_input(trans)
+        methodName = parsedOrder[0].function_identifier
+        if methodName == "provideDelegateOrder":
+            delegateAddress = parsedOrder[1]["delegate"]
+    except Exception as e:
+        print("Failed to decode transaction with error")
+        print(e)
+        sys.exit(1)
+
+    return inputOrderCheck(
+        validatorContract,
+        parsedOrder,
+        fromAddress,
+        blockNumber,
+        network,
+        wrapper,
+        delegate,
+        delegateAddress,
+        verbose,
+    )
+
+
+def parsingRawInputData(
+    validatorContract,
+    trans,
+    fromAddress,
+    blockNumber,
+    network,
+    delegateAddress,
+    verbose,
+):
+    """parsingRawInputData: parses raw inputa data and matches it to a known AirSwap contract."""
+    global w3
+    try:
+        contract = w3.eth.contract(abi=DELEGATE_ABI)
+        parsedOrder = contract.decode_function_input(trans)
+        methodName = parsedOrder[0].function_identifier
+        wrapper = False
+        delegate = True
+    except Exception as e:
+        # no-op
+        delegate = False
+
+    try:
+        contract = w3.eth.contract(abi=WRAPPER_ABI)
+        parsedOrder = contract.decode_function_input(trans)
+        methodName = parsedOrder[0]
+        wrapper = True
+        if methodName == "provideDelegateOrder":
+            delegate = True
+        else:
+            delegate = False
+    except Exception as e:
+        # no-op
+        wrapper = False
+
+    if not wrapper and not delegate:
+        try:
+            contract = w3.eth.contract(abi=SWAP_ABI)
+            parsedOrder = contract.decode_function_input(trans)
+            methodName = parsedOrder[0]
+            delegate = False
+            wrapper = False
+        except Exception as e:
+            # no-op
+            print("Failed to decode data as Delegate, Wrapper, or Swap transactions")
+            sys.exit(1)
+
+    return inputOrderCheck(
+        validatorContract,
+        parsedOrder,
+        fromAddress,
+        blockNumber,
+        network,
+        wrapper,
+        delegate,
+        delegateAddress,
+        verbose,
+    )
+
+
+def inputOrderCheck(
+    validatorContract,
+    parsedOrder,
+    fromAddress,
+    blockNumber,
+    network,
+    wrapper,
+    delegate,
+    delegateAddress=None,
+    verbose=True,
+):
+    """inputOrderCheck: runs a Validator check and outputs errors to std.out"""
+    global w3
+    method = (parsedOrder[0]).function_identifier
+    parsedOrder = parsedOrder[1]["order"]
+    (nonce, expiry, signerParty, senderParty, affiliateParty, signature,) = parsedOrder
 
     Party = namedtuple("Party", "kind wallet token amount id")
     Signature = namedtuple("Signature", "signatory validator version v r s ")
-    parsedOrder = contract.decode_function_input(trans)[1]['order']
-    (
-        nonce,
-        expiry,
-        signerParty,
-        senderParty,
-        affiliateParty,
-        signature,
-    ) = parsedOrder
-
     signerParty = Party(*signerParty)
     senderParty = Party(*senderParty)
     affiliateParty = Party(*affiliateParty)
+    signature = Signature(*signature)
+    if verbose:
+        print("SIGNER PARTY")
+        pprint(dict(signerParty._asdict()), indent=4)
+        print("SENDER PARTY")
+        pprint(dict(senderParty._asdict()), indent=4)
+        print("AFFILIATE PARTY")
+        pprint(dict(affiliateParty._asdict()), indent=4)
+        print("SIGNATURE")
+        pprint(dict(signature._asdict()), indent=4)
+        print("R: " + w3.toHex(signature.r))
+        print("S: " + w3.toHex(signature.s))
+        print()
 
-    preSwapChecker = True
-    if preSwapChecker:
-        if len(delegate) > 0:
-            error = call_delegate_checker(parsedOrder, delegate, network)
-            print(error)
-        elif wrapper:
-            error = call_preswap_wrapper_checker(parsedOrder, fromAddress, network)
-            print(error)
-        else:
-            error = call_preswap_checker(parsedOrder, network)
-            print(error)
+    error = None
 
-    if len(error) > 0:
+    if method == "provideOrder":
+        error = checkDelegate(validatorContract, parsedOrder, delegateAddress)
+    elif method == "provideDelegateOrder":
+        error = checkWrappedDelegate(
+            validatorContract, parsedOrder, delegateAddress, network
+        )
+    elif wrapper and method == "swap":
+        error = checkWrappedSwap(validatorContract, parsedOrder, fromAddress, network)
+    elif method == "swap":
+        error = checkSwap(validatorContract, parsedOrder)
+    else:
+        print("Unrecognized method " + method)
+        sys.exit(1)
 
-        # if senderParty is not used, use the from address instead
-        if senderParty.wallet == "0x0000000000000000000000000000000000000000":
-            senderPartyWallet = fromAddress
-        else:
-            senderPartyWallet = senderParty.wallet
+    if verbose:
+        print([REASONS[e] for e in error])
+    else:
+        print(error)
 
-        if verbose:
-            print("SIGNER PARTY")
-            pprint(dict(signerParty._asdict()), indent=4)
-            print("SENDER PARTY")
-            pprint(dict(senderParty._asdict()), indent=4)
-
-        nonceMessages = check_nonce(signerParty.wallet, network, nonce, blockNumber)
-        print(nonceMessages)
-
-        # check_expiry
-        curtime = int(time.time())
-        if int(time.time()) > expiry:
-            print("Order has expired")
-            if verbose:
-                print(f"Order expired with times: {curtime} > {expiry} expired")
-        # Signer Party checks
-        signer_balance = get_balance(signerParty.token, signerParty.wallet, network, blockNumber)
-        signer_allowance = get_allowance(signerParty.token, signerParty.wallet, network, blockNumber)
-
-        # Check signer party balance is less than what they're sending
-        signer_balance_check = signerParty.amount <= signer_balance
-        signer_allowance_check = signerParty.amount <= signer_allowance
-
-        if not signer_balance_check:
-            print("Signer Balance is insufficient")
-            if verbose:
-                print(
-                    f"Current Balance {signer_balance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_balance}"
-                )
-        if not signer_allowance_check:
-            print("Signer Allowance is insufficient")
-            if verbose:
-                print(
-                    f"Current Allowance {signer_allowance} and requested balance {signerParty.amount} diff {signerParty.amount - signer_allowance}"
-                )
-        # Sender Party checks
-        sender_balance = get_balance(senderParty.token, senderPartyWallet, network, blockNumber)
-        sender_allowance = get_allowance(senderParty.token, senderPartyWallet, network, blockNumber)
-
-        # Check sender party balance is less than what they're sending
-        sender_balance_check = senderParty.amount <= sender_balance
-        sender_allowance_check = senderParty.amount <= sender_allowance
-
-        if verbose:
-            print("SIGNER PARTY")
-            print(f"Token balance {sender_balance}")
-            print(f"Token allowance {sender_allowance}")
-            print(f"Param to send {senderParty.amount}")
-            print("SENDER PARTY")
-            print(f"Token balance {signer_balance}")
-            print(f"Token allowance {signer_allowance}")
-            print(f"Param to send {signerParty.amount}")
-
-        # Balance and Allowance Checks
-        if not sender_balance_check:
-            print("Sender Balance is insufficient")
-            if verbose:
-                print(
-                    f"Current Balance {sender_balance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_balance}"
-                )
-        if not sender_allowance_check:
-            print("Sender Allowance is insufficient")
-            if verbose:
-                print(
-                    f"Current Allowance {sender_allowance} and requested balance {senderParty.amount} diff {senderParty.amount - sender_allowance}"
-                )
 
 if __name__ == "__main__":
     global w3
 
     parser = argparse.ArgumentParser(
-        description="Debug a failed transaction via inputCode."
+        description="Debug a failed transaction via inputData."
     )
     parser.add_argument(
         "--nodeUrl",
@@ -354,11 +315,23 @@ if __name__ == "__main__":
         help="Ethereum node URL: http://localhost:8545",
     )
     parser.add_argument(
-        "--inputCode", type=str, action="store", help="Input byte code as a string"
+        "--inputData",
+        type=str,
+        default=None,
+        action="store",
+        help="Input byte code as a string",
+    )
+    parser.add_argument(
+        "--trxnHash",
+        type=str,
+        default=None,
+        action="store",
+        help="Transaction hash of failed transaction",
     )
     parser.add_argument(
         "--fromAddress",
         type=str,
+        default=ZERO_ADDRESS,
         action="store",
         help="Sending address of the transaction",
     )
@@ -372,7 +345,13 @@ if __name__ == "__main__":
         "--network",
         default="rinkeby",
         action="store",
-        help="Network by name either rinkeby (4) or mainnet (1)",
+        help="Network by name either mainnet, rinkeby, goerli, or kovan",
+    )
+    parser.add_argument(
+        "--delegateAddress",
+        default=ZERO_ADDRESS,
+        action="store",
+        help="Indicate the delegate used in provideOrder",
     )
     parser.add_argument(
         "--verbose",
@@ -381,24 +360,33 @@ if __name__ == "__main__":
         help="Will output a more verbose output",
     )
 
-    parser.add_argument(
-        "--wrapper",
-        default=False,
-        action="store_true",
-        help="Indicate whether a wrapper contract was used",
-    )
-
-    parser.add_argument(
-        "--delegate",
-        default="",
-        action="store_true",
-        help="Indicate whether a delegate contract was used",
-    )
-
     args = parser.parse_args()
-    print(f"USING SWAP ADDRESS {SWAP_CONTRACT[args.network]}")
     if args.nodeUrl is not None:
         NODE_RPC_ENDPOINT = args.nodeUrl
+    if args.inputData is None and args.trxnHash is None:
+        print("--inputCode or --trxnHash must be provided. Exiting!")
+        sys.exit(1)
 
     w3 = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
-    inputOrderCheck(args.inputCode, Web3.toChecksumAddress(args.fromAddress), args.blockNumber, args.network, args.wrapper, args.delegate, args.verbose)
+    validatorContract = w3.eth.contract(
+        address=Web3.toChecksumAddress(VALIDATOR[NETWORKS[args.network]]),
+        abi=VALIDATOR_ABI,
+    )
+    if args.trxnHash is not None:
+        fetchTransactionFromHash(
+            validatorContract,
+            args.trxnHash,
+            args.blockNumber,
+            NETWORKS[args.network],
+            args.verbose,
+        )
+    else:
+        parsingRawInputData(
+            validatorContract,
+            args.inputData,
+            Web3.toChecksumAddress(args.fromAddress),
+            args.blockNumber,
+            NETWORKS[args.network],
+            args.delegateAddress,
+            args.verbose,
+        )
