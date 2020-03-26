@@ -365,7 +365,7 @@ if __name__ == "__main__":
     if args.nodeUrl is not None:
         NODE_RPC_ENDPOINT = args.nodeUrl
     if args.inputData is None and args.trxnHash is None:
-        print("both --inputCode and --trxnHash must be provided. Exiting!")
+        print("--inputCode or --trxnHash must be provided. Exiting!")
         sys.exit(1)
 
     w3 = Web3(Web3.HTTPProvider(NODE_RPC_ENDPOINT))
