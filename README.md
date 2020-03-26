@@ -39,7 +39,7 @@ NODE_RPC_ENDPOINT='http://localhost:8545' python decode_order.py
 Use with transactionHash
 ```
 python decode_order.py 
---node-url http://localhost:8545 
+--nodeUrl http://localhost:8545 
 --trxnHash <0x> 
 --verbose
 --blockNumber <>
@@ -49,7 +49,7 @@ python decode_order.py
 Use with inputData from transaction
 ```
 python decode_order.py 
---node-url http://localhost:8545 
+--nodeUrl http://localhost:8545 
 --inputData <long input string> 
 --fromAddress <hexAddress> --verbose
 --blockNumber <>

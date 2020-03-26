@@ -344,6 +344,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         default="rinkeby",
+        choices=["mainnet", "rinkeby", "goerli", "kovan"],
         action="store",
         help="Network by name either mainnet, rinkeby, goerli, or kovan",
     )
